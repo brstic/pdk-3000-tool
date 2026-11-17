@@ -1384,7 +1384,7 @@ static LRESULT CALLBACK WndProc(HWND h,UINT m,WPARAM w,LPARAM l){
                 else {
                     int a=MessageBoxA(h,
                        "Compare block 0x13 in the TCU with what?\n\n"
-                       "YES = official Porsche KD Mitten Bin (.bin file next to the exe)\n"
+                       "YES = official Porsche KD Mitten Bin (built in)\n"
                        "        (you choose the model year next)\n"
                        "NO  = choose a file (e.g. donor _block13.bin)\n"
                        "CANCEL = nothing",

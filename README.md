@@ -193,10 +193,11 @@ All files are written next to `PdkTool.exe`:
 
 ## The Mitten Bin
 
-The *KD Mitten Bin* is Porsche's default teach-in parameter block (logical block 0x13). Both versions are attached
-to the [release](https://github.com/brstic/pdk-3000-tool/releases/latest) as separate downloads. To use them, put the
-`.bin` next to `PdkTool.exe`. PdkTool recognises a Mitten Bin by its CRC32, whatever the file is called. A 16384-byte
-file from a TCU backup works too.
+The *KD Mitten Bin* is Porsche's default teach-in parameter block (logical block 0x13). Both versions are **built
+into PdkTool** ([`src/mittenbin.h`](src/mittenbin.h)), so button 3 works with nothing extra. They are also attached to
+the [release](https://github.com/brstic/pdk-3000-tool/releases/latest) as separate `.bin` downloads. Without the
+built-in copy (build without `src/mittenbin.h`), PdkTool loads a `.bin` placed next to `PdkTool.exe` and recognises
+it by CRC32, whatever the file is called. A 16384-byte file from a TCU backup works too.
 
 | File | Mitten Bin | Model years | CRC32 (first 15872 bytes) |
 |---|---|---|---|
@@ -254,7 +255,7 @@ decoders are header-only (`src/*.h`).
 ## FAQ
 
 **Do I need PIWIS?** Not for diagnosis, live data, teach-in or the EEPROM analysis. PIWIS is only needed for coding.
-Both Mitten Bins are in the release.
+Both Mitten Bins are built in.
 
 **Will it work with other cables?** It is written for the Tactrix OpenPort 2.0. Other J2534 cables may work if their
 driver registers under `PassThruSupport.04.04`, but none has been tested.
