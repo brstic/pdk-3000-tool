@@ -253,8 +253,8 @@ decoders are header-only (`src/*.h`).
 
 ## FAQ
 
-**Do I need PIWIS?** Not for diagnosis, live data, teach-in or the EEPROM analysis. PIWIS is only needed for coding,
-or if you want the original Mitten Bin file.
+**Do I need PIWIS?** Not for diagnosis, live data, teach-in or the EEPROM analysis. PIWIS is only needed for coding.
+Both Mitten Bins are in the release.
 
 **Will it work with other cables?** It is written for the Tactrix OpenPort 2.0. Other J2534 cables may work if their
 driver registers under `PassThruSupport.04.04`, but none has been tested.
