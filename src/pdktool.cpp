@@ -34,6 +34,7 @@ static uint32_t crc32buf(const uint8_t *p, size_t n) {
 #include "dtc_table.h"
 #include "dtc_ff.h"
 #include "teachin_conditions.h"
+#include "platforms.h"
 #include "eeprom_decode.h"
 #include "clutch_decode.h"
 #include "usage_decode.h"
@@ -123,9 +124,16 @@ enum {
     ID_IDENTIFY, ID_GETSEED, ID_UNLOCK, ID_READEEP, ID_READ13, ID_READ14,
     ID_TEACH_S, ID_TEACH_C, ID_TEACH_H, ID_FF1872, ID_RESTOREWR, ID_STOP,
     ID_BROWSE_B, ID_BROWSE_R, ID_SELFTEST, ID_DETECT,
-    ID_DIAGNOSE, ID_READDONOR, ID_TEACHALL, ID_LIVEROD, ID_MARK, ID_CLEARDTC, ID_ANALYZEEE, ID_VALVETEST, IDC_VALVESEL, ID_FULLBACKUP
+    ID_DIAGNOSE, ID_READDONOR, ID_TEACHALL, ID_LIVEROD, ID_MARK, ID_CLEARDTC, ID_ANALYZEEE, ID_VALVETEST, IDC_VALVESEL, ID_FULLBACKUP, IDC_PLATFORM
 };
 #define TIMER_DEVCHECK 1
+// Vehicle / TCU family. 0 = Panamera 970 PDK 3000 (full support, firmware RE),
+// 1 = 911 991 / Boxster-Cayman 981 / 718, 2 = 918 Spyder (level 1: PIWIS database only).
+static int g_platform = 0;
+static const char *PLAT_NAME[3] = {"Panamera 970 (2010-2016) - full support",
+                                   "911 (991) / Boxster, Cayman (981, 718) - basic",
+                                   "918 Spyder - basic"};
+static HWND g_hPlat = nullptr;
 static HWND g_hLog = nullptr, g_hTx = nullptr, g_hRx = nullptr,
            g_hBackup = nullptr, g_hRestore = nullptr, g_hMain = nullptr,
            g_hStatus = nullptr;
@@ -530,6 +538,18 @@ static bool uploadBlock13(Bus &b, std::vector<uint8_t> &all) {
 static void printTeachConds(uint8_t lid, const std::vector<uint8_t> &r, bool onlyBad) {
     if (r.size()<7) return;
     uint32_t c=((uint32_t)r[3]<<24)|((uint32_t)r[4]<<16)|((uint32_t)r[5]<<8)|r[6];
+    if (g_platform!=0) {                       // ZF condition texts from the PIWIS database
+        const PlatCond *t; int n; bool p1=(g_platform==1);
+        if(lid==TEACH_LID_RODS){t=p1?COND_9X1_RODS:COND_918_RODS; n=p1?PLAT_N(COND_9X1_RODS):PLAT_N(COND_918_RODS);}
+        else if(lid==TEACH_LID_CLUTCH){t=p1?COND_9X1_CLUTCH:COND_918_CLUTCH; n=p1?PLAT_N(COND_9X1_CLUTCH):PLAT_N(COND_918_CLUTCH);}
+        else {t=p1?COND_9X1_HYDR:COND_918_HYDR; n=p1?PLAT_N(COND_9X1_HYDR):PLAT_N(COND_918_HYDR);}
+        int bad=0;
+        for(int i=0;i<n;i++){ bool ok=(c>>t[i].bit)&1; if(!ok) bad++;
+            if(!onlyBad || !ok){ char b2[24]; sprintf(b2,"   [bit %2d = %d] ",t[i].bit,ok?1:0); logLine(b2+std::string(t[i].text)); } }
+        char m[160]; sprintf(m,"   condition word 0x%08X, %d bit(s) at 0. On the 970, 1 = OK and 0 = this condition stops the routine;",c,bad); logLine(m);
+        logLine("   the same is expected on this model but not yet confirmed.");
+        return;
+    }
     const TeachCond *t; int n;
     if(lid==TEACH_LID_RODS){t=TEACH_RODS;n=TEACH_COUNT(TEACH_RODS);}
     else if(lid==TEACH_LID_CLUTCH){t=TEACH_CLUTCH;n=TEACH_COUNT(TEACH_CLUTCH);}
@@ -700,6 +720,7 @@ template<class B> static bool tSec(B&b,uint8_t lvl){std::vector<uint8_t>r;
     uint16_t seed=(r[2]<<8)|r[3],key=pdkKey16(seed);
     std::vector<uint8_t>snd={0x27,(uint8_t)(lvl+1),(uint8_t)(key>>8),(uint8_t)(key&0xFF)};
     return b.xfer(snd,0x67,r,0);}
+static const DtcInfo *findDtc(uint16_t code);
 static void actSelfTest() {
     int fails=0; auto chk=[&](const char*n,bool ok){logLine(std::string("[TEST] ")+n+": "+(ok?"OK":"FAIL"));if(!ok)fails++;};
     // seed/key spot checks
@@ -714,6 +735,11 @@ static void actSelfTest() {
     auto d=a.handle({0x18,0,0xFF,0}); bool f1872=false; for(size_t i=2;i+1<d.size();i+=3)if(((d[i]<<8)|d[i+1])==0x1872)f1872=true;
     chk("DTC parse P1872",f1872);
     extern bool rodDecodeSelfTest(); chk("live rod sensor decode",rodDecodeSelfTest());
+    { int sv=g_platform; bool ok=true;
+      g_platform=1; const DtcInfo*a=findDtc(0x0164); ok=ok&&a&&!strcmp(a->pcode,"P0164"); a=findDtc(0x1870); ok=ok&&a&&a->hint[0];
+      g_platform=2; a=findDtc(0x1872); ok=ok&&a&&a->hint[0];
+      g_platform=0; a=findDtc(0x1731); ok=ok&&a&&a->hint[0];
+      g_platform=sv; chk("DTC catalogues 970 / 911-981-718 / 918",ok); }
     extern bool writeSelfTest(); chk("Mitten Bin data intact + RequestUpload format",writeSelfTest());
     logLine(fails?"[SELF-TEST] *** FAILED ***":"[SELF-TEST] ALL PASSED - exe runs and logic is correct on this PC.");
 }
@@ -735,6 +761,15 @@ static std::string stamp(){ SYSTEMTIME t; GetLocalTime(&t); char b[32];
 static FILE *g_report = nullptr;
 static void rep(const std::string &s){ logLine(s); if(g_report) fprintf(g_report,"%s\r\n",s.c_str()); }
 static const DtcInfo *findDtc(uint16_t code){
+    if (g_platform!=0) {                       // level-1 platforms: catalogue from the PIWIS database
+        const PlatDtc *t = g_platform==1 ? DTC_9X1 : DTC_918;
+        int n = g_platform==1 ? PLAT_N(DTC_9X1) : PLAT_N(DTC_918);
+        static DtcInfo tmp;
+        for(int i=0;i<n;i++) if(t[i].code==code){
+            const char *h = (code>=0x1870&&code<=0x1872) ? "Run TEACH-IN: shift rods, then hydraulics, then clutches." : "";
+            tmp = DtcInfo{t[i].code,t[i].pcode,t[i].en,t[i].de,h,1}; return &tmp; }
+        return nullptr;
+    }
     for(int i=0;i<DTC_COUNT;i++) if(DTC_TABLE[i].code==code) return &DTC_TABLE[i];
     return nullptr;
 }
@@ -839,6 +874,7 @@ static void actDiagnose(Bus &b){
     std::string path=exeDir()+"\\PDK_diag_"+stamp()+".txt";
     g_report=fopen(path.c_str(),"w");
     rep("=== DIAGNOSE ===");
+    rep(std::string("Vehicle: ")+PLAT_NAME[g_platform]);
     startSession(b,0x81); Sleep(150);
     std::vector<uint8_t> r;
     if(b.xfer({0x1A,0x9B},0x5A,r,2000)) rep("[IDENT] "+hex(r.data()+2,(int)r.size()-2));
@@ -862,7 +898,8 @@ static void actDiagnose(Bus &b){
         if(b.xfer({0x17,(uint8_t)(d.c>>8),(uint8_t)d.c},0x57,f,3000)){
             rep("      [17 raw] "+hex(f.data(),(int)f.size()));
             int n = f.size()>1 ? f[1] : 0;
-            for(int i=0;i<n && 2+24*(i+1)<=(int)f.size();i++) decodeRecord17(f.data()+2+24*i);
+            if (g_platform==0) for(int i=0;i<n && 2+24*(i+1)<=(int)f.size();i++) decodeRecord17(f.data()+2+24*i);
+            else rep("      (freeze-frame decoding is available for the Panamera 970 only - raw bytes above)");
             if(n==0 || f.size()<26) rep("      (no freeze-frame record in the answer)");
         } else rep("      (no freeze frame returned)");
         testerPresent(b);
@@ -913,6 +950,13 @@ static void actReadBlockUpload(Bus &b, uint8_t block) {
 // Order verified in the firmware: the clutch teach-in needs a valid hydraulic
 // adaptation (clutch condition bit 12), so: shift rods -> hydraulics -> clutches.
 static bool confirmPdk3000(Bus &b) {
+    if (g_platform!=0) {
+        std::vector<uint8_t> r; startSession(b,0x81); Sleep(150);
+        if (b.xfer({0x1A,0x9B},0x5A,r,2000)) logLine("[TEACHIN] TCU ident: "+hex(r.data()+2,(int)r.size()-2));
+        std::string q=std::string("Vehicle: ")+PLAT_NAME[g_platform]+"\n\nThe teach-in routines (31 20 / 31 22 / 31 21) are the same as on the "
+            "Panamera 970 according to the Porsche database, but this tool has not been used on this model yet.\n\nContinue?";
+        return MessageBoxA(g_hMain,q.c_str(),"Teach-in",MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2)==IDYES;
+    }
     startSession(b,0x81); Sleep(150);
     std::vector<uint8_t> r; std::string asc;
     for (uint8_t id : {(uint8_t)0x9B,(uint8_t)0x91,(uint8_t)0x92,(uint8_t)0x94}) {
@@ -1252,6 +1296,11 @@ static LRESULT CALLBACK WndProc(HWND h,UINT m,WPARAM w,LPARAM l){
         g_hStatus=CreateWindowA("STATIC","Tactrix: checking...",WS_CHILD|WS_VISIBLE,x,y,380,20,h,0,0,0);
         mkButton(h,"Detect",ID_DETECT,x+400,y-2,90,24);
         y+=26;
+        CreateWindowA("STATIC","Vehicle:",WS_CHILD|WS_VISIBLE,x,y+4,52,16,h,0,0,0);
+        g_hPlat=CreateWindowA("COMBOBOX","",WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST|WS_VSCROLL,x+56,y,434,200,h,(HMENU)IDC_PLATFORM,0,0);
+        for(const char*pn:PLAT_NAME) SendMessageA(g_hPlat,CB_ADDSTRING,0,(LPARAM)pn);
+        SendMessageA(g_hPlat,CB_SETCURSEL,0,0);
+        y+=30;
         // ---- BIG one-click tasks (what the user actually wants to do) ----
         HFONT big=CreateFontA(19,0,0,0,FW_BOLD,0,0,0,DEFAULT_CHARSET,0,0,0,0,"Segoe UI");
         auto bigBtn=[&](const char*t,int id,int bx,int by){
@@ -1333,6 +1382,8 @@ static LRESULT CALLBACK WndProc(HWND h,UINT m,WPARAM w,LPARAM l){
     case WM_COMMAND: {
         int id=LOWORD(w);
         if(id==ID_STOP){g_stop=true;logLine("[STOP] requested.");return 0;}
+        if(id==ID_ANALYZEEE && g_platform!=0){ MessageBoxA(h,"EEPROM analysis is available for the Panamera 970 (PDK 3000) only.",
+                "Panamera 970 only",MB_OK|MB_ICONINFORMATION); return 0; }
         if(id==ID_ANALYZEEE){
             char file[512]=""; OPENFILENAMEA ofn={0}; ofn.lStructSize=sizeof(ofn); ofn.hwndOwner=h;
             ofn.lpstrFilter="EEPROM dump\0*.bin;*EEprom*\0All\0*.*\0"; ofn.lpstrFile=file; ofn.nMaxFile=sizeof(file);
@@ -1349,6 +1400,16 @@ static LRESULT CALLBACK WndProc(HWND h,UINT m,WPARAM w,LPARAM l){
         if(id==ID_DETECT){ g_detVerbose=true; logLine("[DEV] checking..."); kickDetect(); return 0; }
         bool devAction = (id>=ID_IDENTIFY && id<=ID_RESTOREWR) ||
                          id==ID_DIAGNOSE || id==ID_READDONOR || id==ID_TEACHALL || id==ID_LIVEROD || id==ID_CLEARDTC || id==ID_VALVETEST || id==ID_FULLBACKUP;
+        if(id==IDC_PLATFORM){ if(HIWORD(w)==CBN_SELCHANGE){ int sel=(int)SendMessageA(g_hPlat,CB_GETCURSEL,0,0);
+                g_platform = sel<0?0:sel; logLine(std::string("[VEHICLE] ")+PLAT_NAME[g_platform]);
+                if(g_platform) logLine("[VEHICLE] Available: DIAGNOSE, TEACH-IN, Teach buttons, Clear DTCs, Identify. "
+                                       "The other functions need the firmware of this TCU and stay Panamera 970 only."); }
+            return 0; }
+        { bool only970 = id==ID_READDONOR || id==ID_RESTOREWR || id==ID_LIVEROD || id==ID_VALVETEST || id==ID_FULLBACKUP ||
+                         id==ID_READEEP || id==ID_READ13 || id==ID_READ14 || id==ID_ANALYZEEE;
+          if(only970 && g_platform!=0){ MessageBoxA(h,"This function is available for the Panamera 970 (PDK 3000) only.\n\n"
+                "It depends on the TCU firmware (memory addresses, flasher, EEPROM layout), which has been analysed for the 970 only.\n"
+                "On this model use DIAGNOSE, TEACH-IN and Clear DTCs.","Panamera 970 only",MB_OK|MB_ICONINFORMATION); return 0; } }
         if(devAction){
             if(g_devState!=1){ if(MessageBoxA(h,"Tactrix not detected. Connect it (USB) and OBD/CAN.\n\nTry anyway?",
                 "No device",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES) return 0; }
@@ -1432,8 +1493,8 @@ int WINAPI WinMain(HINSTANCE hi,HINSTANCE,LPSTR,int show){
     WNDCLASSA wc={0}; wc.lpfnWndProc=WndProc; wc.hInstance=hi; wc.lpszClassName="PdkToolWnd";
     wc.hCursor=LoadCursor(0,IDC_ARROW); wc.hbrBackground=(HBRUSH)(COLOR_BTNFACE+1);
     RegisterClassA(&wc);
-    g_hMain=CreateWindowA("PdkToolWnd","PDK 3000 Bench Tool - Porsche 970 (TC1766)",
-        WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,540,824,0,0,hi,0);
+    g_hMain=CreateWindowA("PdkToolWnd","PdkTool - Porsche PDK (Panamera 970, 911 991, Boxster/Cayman 981/718, 918)",
+        WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,540,854,0,0,hi,0);
     ShowWindow(g_hMain,show); UpdateWindow(g_hMain);
     MSG msg; while(GetMessage(&msg,0,0,0)){TranslateMessage(&msg);DispatchMessage(&msg);}
     return 0;

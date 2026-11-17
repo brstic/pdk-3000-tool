@@ -13,12 +13,14 @@
   <img src="https://img.shields.io/badge/interface-Tactrix%20OpenPort%202.0%20(J2534)-333?style=flat-square" alt="Tactrix J2534">
   <img src="https://img.shields.io/badge/protocol-KWP2000%20on%20CAN-333?style=flat-square" alt="KWP2000 on CAN">
   <img src="https://img.shields.io/badge/TCU-5WP54023%20·%20TC1766-333?style=flat-square" alt="TCU">
+  <img src="https://img.shields.io/badge/vehicles-Panamera%20970%20·%20911%20991%20·%20981%20·%20718%20·%20918-333?style=flat-square" alt="Vehicles">
   <img src="https://img.shields.io/badge/language-C%2B%2B17-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/status-not%20yet%20tested%20on%20a%20car-orange?style=flat-square" alt="Status">
 </p>
 
 <p align="center">
-  <b>Free diagnostics, teach-in and EEPROM analysis for the Porsche Panamera 970 PDK gearbox controller.</b><br>
+  <b>Free diagnostics, teach-in and EEPROM analysis for Porsche PDK gearbox controllers.</b><br>
+  Panamera 970 (full) · 911 991 · Boxster/Cayman 981 &amp; 718 · 918 Spyder (basic)<br>
   One small Windows exe · a Tactrix cable · no PIWIS needed for diagnosis and teach-in.
 </p>
 
@@ -34,6 +36,7 @@
 
 - [What it is](#what-it-is)
 - [Features](#features)
+- [Supported vehicles](#supported-vehicles)
 - [Supported hardware](#supported-hardware)
 - [Quick start](#quick-start)
 - [How to use it](#how-to-use-it)
@@ -76,11 +79,27 @@ running the basic settings (teach-in) after a repair, and checking a used or don
 | 🔧 | **Valve test** | Actuates EDS1–7 and MV1–3 one at a time (car standing, selector in P). |
 | 🧪 | **Self-test** | Checks the program on your PC without a car: seed/key, protocol logic and decoders. |
 
+## Supported vehicles
+
+Pick the vehicle in the **Vehicle** list at the top of the window.
+
+| Vehicle | Support | What works |
+|---|---|---|
+| **Panamera 970** (2010–2016), PDK 3000 | ✅ **Full**. The TCU firmware was analysed. | Everything: diagnosis with decoded freeze frames, teach-in with firmware limits, live data, EEPROM analysis, donor read, block 0x13, valve test, full backup |
+| **911 (991)**, **Boxster / Cayman (981, 718)** with PDK | 🟡 **Basic**. Built from the Porsche diagnostic database. | Diagnosis (fault codes with English text, raw freeze frames), guided teach-in (rods → hydraulics → clutches) with the ZF condition texts, clear DTCs, identification |
+| **918 Spyder** | 🟡 **Basic** | Same as the 991 / 981 / 718 |
+| 911 (992), Panamera 971, Macan | ❌ Not yet | These use UDS and a different TCU generation |
+
+For the basic models, the Porsche database shows that the diagnostic services, CAN IDs (0x70F / 0x779) and teach-in
+routine numbers are the same as on the 970. Functions that depend on the TCU firmware (live data addresses, EEPROM
+layout, flasher) stay Panamera 970 only until someone provides a firmware dump of that TCU. Full support for another
+model needs only that dump; open an issue if you have one.
+
 ## Supported hardware
 
 | Item | Supported |
 |---|---|
-| Vehicle | Porsche Panamera 970 / 970 II with PDK (TCU 970.618.270.xx, Continental 5WP54023) |
+| Vehicle | See [Supported vehicles](#supported-vehicles). Full support: Panamera 970 / 970 II with PDK (TCU 970.618.270.xx, Continental 5WP54023) |
 | TCU software | G070 and G088 (others will probably work; live rod data picks the RAM layout automatically) |
 | Interface | Tactrix OpenPort 2.0 with its J2534 driver installed |
 | PC | Windows (7 or newer). The exe is 32-bit on purpose, because the Tactrix `op20pt32.dll` is a 32-bit DLL. |
