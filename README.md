@@ -38,7 +38,7 @@
 - [Quick start](#quick-start)
 - [How to use it](#how-to-use-it)
 - [Files it creates](#files-it-creates)
-- [The Mitten Bin (not included)](#the-mitten-bin-not-included)
+- [The Mitten Bin](#the-mitten-bin)
 - [Reverse-engineering notes](#reverse-engineering-notes)
 - [Building from source](#building-from-source)
 - [Repository layout](#repository-layout)
@@ -191,18 +191,20 @@ All files are written next to `PdkTool.exe`:
 | `PDK_<time>_block13.bin` | CHECK BLOCK 0x13 |
 | `PDK_full_<time>_IntFl.bin`, `_EEprom.bin` | Full backup |
 
-## The Mitten Bin (not included)
+## The Mitten Bin
 
-The *KD Mitten Bin* is Porsche's default teach-in parameter block (logical block 0x13). It is Porsche property and is
-**not** in this repository or the release. The German PIWIS fault texts are left out for the same reason.
+The *KD Mitten Bin* is Porsche's default teach-in parameter block (logical block 0x13). Both versions are attached
+to the [release](https://github.com/brstic/pdk-3000-tool/releases/latest) as separate downloads. To use them, put the
+`.bin` next to `PdkTool.exe`. PdkTool recognises a Mitten Bin by its CRC32, whatever the file is called. A 16384-byte
+file from a TCU backup works too.
 
-To use the comparison in button 3, put your own copy next to `PdkTool.exe`. It can come from your PIWIS installation
-or from a TCU backup, and may be 15872 or 16384 bytes. PdkTool recognises it by CRC32, whatever the file is called:
+| File | Mitten Bin | Model years | CRC32 (first 15872 bytes) |
+|---|---|---|---|
+| `MittenBin_97061897000_MY2010-2013.bin` | 970.618.970.00 | MY 2010–2013 and 970 II GTS | `0x811C0A13` |
+| `MittenBin_97061897100_MY2014plus.bin` | 970.618.971.00 | MY 2014+ | `0xF6C74A85` |
 
-| Mitten Bin | Model years | CRC32 (first 15872 bytes) |
-|---|---|---|
-| 970.618.970.00 | MY 2010–2013 and 970 II GTS | `0x811C0A13` |
-| 970.618.971.00 | MY 2014+ | `0xF6C74A85` |
+On the TCUs examined so far, block 0x13 already held 970.618.970.00. The learned data is in the EEPROM, so after a
+repair the usual fix is a teach-in, not a new Mitten Bin.
 
 ## Reverse-engineering notes
 
