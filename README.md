@@ -25,9 +25,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/brstic/pdk-3000-tool/releases/latest"><b>⬇ Download PdkTool</b></a> ·
-  <a href="docs/PdkTool_Manual.pdf"><b>📖 Manual (PDF)</b></a> ·
-  <a href="docs/PDK_TCU_KNOWLEDGE.md"><b>🔬 Reverse-engineering notes</b></a>
+  <a href="https://github.com/brstic/pdk-3000-tool/releases/latest"><b>⬇ Download PdkTool</b></a>
 </p>
 
 ---
@@ -42,7 +40,6 @@
 - [How to use it](#how-to-use-it)
 - [Files it creates](#files-it-creates)
 - [The Mitten Bin](#the-mitten-bin)
-- [Reverse-engineering notes](#reverse-engineering-notes)
 - [Building from source](#building-from-source)
 - [Repository layout](#repository-layout)
 - [FAQ](#faq)
@@ -55,7 +52,7 @@
 controlling a ZF 7DT70 dual-clutch gearbox. PdkTool talks to the TCU over the OBD port with KWP2000 on CAN, through a
 Tactrix OpenPort 2.0.
 
-All of its knowledge was reverse-engineered **from the TCU firmware itself** (software G070 and G088): request
+It speaks the TCU's own diagnostic protocol (software G070 and G088), worked out for interoperability: request
 formats, sessions, units, thresholds, fault codes and freeze-frame layouts. It is meant for repairing your own car or
 TCUs in a workshop. Common jobs are reading what a fault really means, checking the shift-rod distance sensors,
 running the basic settings (teach-in) after a repair, and checking a used or donor TCU before you install it.
@@ -210,46 +207,26 @@ All files are written next to `PdkTool.exe`:
 | `PDK_<time>_block13.bin` | CHECK BLOCK 0x13 |
 | `PDK_full_<time>_IntFl.bin`, `_EEprom.bin` | Full backup |
 
+## SecurityAccess (unlock)
+
+Reading faults, live data, the teach-in routines and most actions need **no** unlock. A few actions (reading
+memory, the flasher) use SecurityAccess (`0x27`). PdkTool ships **no** unlock key: the `seed → key` computation
+lives in a local file (`src/pdk_key_local.h`) that is not published and that you generate from your own licensed
+installation. Build with it present and the full tool is enabled; without it everything except those few actions works.
+
 ## The Mitten Bin
 
-The *KD Mitten Bin* is Porsche's default teach-in parameter block (logical block 0x13). Both versions are **built
-into PdkTool** ([`src/mittenbin.h`](src/mittenbin.h)), so button 3 works with nothing extra. They are also attached to
-the [release](https://github.com/brstic/pdk-3000-tool/releases/latest) as separate `.bin` downloads. Without the
-built-in copy (build without `src/mittenbin.h`), PdkTool loads a `.bin` placed next to `PdkTool.exe` and recognises
-it by CRC32, whatever the file is called. A 16384-byte file from a TCU backup works too.
+The *KD Mitten Bin* is the manufacturer's default teach-in parameter block (logical block 0x13). **PdkTool does not
+include it.** If you need it, place your own copy — e.g. block 0x13 read from a good TCU with PdkTool itself, or the
+file from your own licensed installation — next to `PdkTool.exe` as a `.bin` file. PdkTool recognises it by CRC32:
 
-| File | Mitten Bin | Model years | CRC32 (first 15872 bytes) |
-|---|---|---|---|
-| `MittenBin_97061897000_MY2010-2013.bin` | 970.618.970.00 | MY 2010–2013 and 970 II GTS | `0x811C0A13` |
-| `MittenBin_97061897100_MY2014plus.bin` | 970.618.971.00 | MY 2014+ | `0xF6C74A85` |
+| Mitten Bin | Model years | CRC32 (first 15872 bytes) |
+|---|---|---|
+| 970.618.970.00 | MY 2010–2013 and 970 II GTS | `0x811C0A13` |
+| 970.618.971.00 | MY 2014+ | `0xF6C74A85` |
 
-On the TCUs examined so far, block 0x13 already held 970.618.970.00. The learned data is in the EEPROM, so after a
-repair the usual fix is a teach-in, not a new Mitten Bin.
-
-## Reverse-engineering notes
-
-The [`docs/`](docs) folder holds what was learned about this TCU. Each finding is marked **VERIFIED**, **INFERRED** or
-**OPEN**.
-
-| Document | Topic |
-|---|---|
-| [PDK_TCU_KNOWLEDGE.md](docs/PDK_TCU_KNOWLEDGE.md) | Summary of everything below |
-| [teachin_thresholds.md](docs/re_findings/teachin_thresholds.md) | Teach-in routines, steps, limits, start conditions |
-| [eeprom_map.md](docs/re_findings/eeprom_map.md) | EEPROM emulation format, CRCs, block map, adaptation sub-blocks |
-| [clutch_adaptation.md](docs/re_findings/clutch_adaptation.md) | Clutch touch points, fast-fill, hydraulic adaptation |
-| [usage_stats.md](docs/re_findings/usage_stats.md) | Odometer, operating hours, event and reset logs |
-| [dtc_and_live.md](docs/re_findings/dtc_and_live.md) | Fault table, DTC → freeze-frame map, live RAM map |
-| [env_signals.md](docs/re_findings/env_signals.md) | Freeze-frame measurement IDs, units and scaling |
-| [kwp_services.md](docs/re_findings/kwp_services.md) | KWP2000 services per session, memory reads, the flasher |
-| [units_ids_routines.md](docs/re_findings/units_ids_routines.md) | Units, routine IDs, hidden routines |
-| [sw_diff_G070_G088.md](docs/re_findings/sw_diff_G070_G088.md) | What changed between software G070 and G088 |
-
-Highlights:
-- The distance sensor's PWM duty is valid only between 8.00 % and 92.00 %. Position = curve(duty) − 13.75 mm.
-- Synchro distance limit: 0.75–5 mm.
-- The TCU does not check the VIN, so a donor swap needs only the teach-ins.
-
-Python tool: [`tools/eeprom_decode.py`](tools/eeprom_decode.py) decodes and checks an EEPROM dump.
+Note: on the units examined, block 0x13 already equals the Mitten Bin; after a TCU or mechatronic repair the usual fix
+is a teach-in, not a new Mitten Bin.
 
 ## Building from source
 
@@ -265,7 +242,7 @@ decoders are header-only (`src/*.h`).
 
 ```
 ├── src/            PdkTool source (pdktool.cpp + decoder headers)
-├── docs/           Manual (PDF), knowledge base, detailed RE notes
+├── docs/           (your own notes)
 ├── tools/          eeprom_decode.py, dtc_hints.py
 ├── assets/         README banner
 └── build.sh        one-line MinGW build
@@ -274,7 +251,7 @@ decoders are header-only (`src/*.h`).
 ## FAQ
 
 **Do I need PIWIS?** Not for diagnosis, live data, teach-in or the EEPROM analysis. PIWIS is only needed for coding.
-Both Mitten Bins are built in.
+No Mitten Bin is included; see [The Mitten Bin](#the-mitten-bin).
 
 **Will it work with other cables?** It is written for the Tactrix OpenPort 2.0. Other J2534 cables may work if their
 driver registers under `PassThruSupport.04.04`, but none has been tested.

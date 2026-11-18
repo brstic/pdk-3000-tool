@@ -252,19 +252,15 @@ struct Bus {
     }
 };
 
-// ---------------------------------------------------------------------------
-// PDK 3000 seed->key  (ASAM_seedkey_PDK, verified over all 65536 seeds)
-// ---------------------------------------------------------------------------
-static uint16_t pdkKey16(uint16_t s16) {
-    int rot=0,op=0;
-    if (s16&0x0040) rot+=1; if (s16&0x0400) rot+=2; if (s16&0x0004) rot+=4; if (s16&0x2000) rot+=8;
-    if (s16&0x0200) op+=1;  if (s16&0x4000) op+=2;
-    uint32_t w=s16;
-    if (s16&0x0010) { for(int i=0;i<rot;i++){uint32_t b=w&0x8000; w=(w<<1)&0xFFFE; if(b)w|=1;} }
-    else            { for(int i=0;i<rot;i++){uint32_t b=w&1;      w=(w>>1)&0x7FFF; if(b)w|=0x8000;} }
-    switch(op){case 0:w=s16&w;break;case 1:w=s16|w;break;case 2:w=s16^w;break;case 3:w=~s16;break;}
-    return (uint16_t)(w&0xFFFF);
-}
+// Seed->key for SecurityAccess: kept in a local file (src/pdk_key_local.h) that is not published.
+// Without it PdkTool does everything except the functions that need SecurityAccess.
+#ifdef PDK_LOCAL_KEY
+#include "pdk_key_local.h"
+static const bool kHaveKey = true;
+#else
+static const bool kHaveKey = false;
+static uint16_t pdkKey16(uint16_t) { return 0; }
+#endif
 
 // ---------------------------------------------------------------------------
 // KWP services
@@ -273,6 +269,7 @@ static bool startSession(Bus &b, uint8_t ss) { std::vector<uint8_t> r; return b.
 static void testerPresent(Bus &b){ b.send({0x3E,0x01}); }
 
 static bool securityAccess(Bus &b, uint8_t level) {
+    if (!kHaveKey) { logLine("[LOCKED] SecurityAccess needs your local key file src/pdk_key_local.h (not published) - see README."); return false; }
     std::vector<uint8_t> r;
     if (!b.xfer({0x27,level},0x67,r,2000)) { logLine("[SEC] no seed response."); return false; }
     if (r.size()<4) { logLine("[SEC] seed too short: "+hex(r.data(),(int)r.size())); return false; }
@@ -612,7 +609,7 @@ static bool actTeach(Bus &b, const char *which) {
 // the Mitten Bin / a chosen file. Both known TCUs already hold Mitten Bin 970.618.970.00.
 // ---------------------------------------------------------------------------
 static std::string exeDir();
-// Mitten Bin source: built in (private build) or a .bin file next to PdkTool.exe, recognised by CRC32.
+// Mitten Bin source: your own .bin file next to PdkTool.exe, recognised by CRC32 (a private build may embed one).
 static bool getMitten(int which, std::vector<uint8_t> &img) {
     const uint32_t want = which==1 ? MITTEN_97000_CRC32 : MITTEN_97100_CRC32;
 #ifdef PDK_EMBED_MITTEN
@@ -1437,15 +1434,15 @@ static LRESULT CALLBACK WndProc(HWND h,UINT m,WPARAM w,LPARAM l){
                    MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES) return 0;
             }
             if(write){
-                // Source: a file chosen in "Write file", otherwise offer the built-in
-                // official Porsche KD Mitten Bin.
+                // Source: a file chosen in "Write file", otherwise the user's own Mitten Bin .bin
+                // placed next to PdkTool.exe (recognised by CRC32).
                 char rf[8]; GetWindowTextA(g_hRestore,rf,sizeof(rf));
                 std::string src;
                 if(rf[0]){ g_restoreSrc=0; src="the file in 'Write file'"; }
                 else {
                     int a=MessageBoxA(h,
                        "Compare block 0x13 in the TCU with what?\n\n"
-                       "YES = official Porsche KD Mitten Bin (built in)\n"
+                       "YES = your own KD Mitten Bin (.bin next to PdkTool.exe)\n"
                        "        (you choose the model year next)\n"
                        "NO  = choose a file (e.g. donor _block13.bin)\n"
                        "CANCEL = nothing",

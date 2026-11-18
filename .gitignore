@@ -3,3 +3,5 @@ PdkTool.exe
 *.csv
 PDK_*.txt
 .DS_Store
+src/pdk_key_local.h
+src/mittenbin.h
