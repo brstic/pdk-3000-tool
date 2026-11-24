@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/TCU-5WP54023%20·%20TC1766-333?style=flat-square" alt="TCU">
   <img src="https://img.shields.io/badge/vehicles-Panamera%20970%20·%20911%20991%20·%20981%20·%20718%20·%20918-333?style=flat-square" alt="Vehicles">
   <img src="https://img.shields.io/badge/language-C%2B%2B17-00599C?style=flat-square&logo=cplusplus&logoColor=white" alt="C++17">
-  <img src="https://img.shields.io/badge/status-not%20yet%20tested%20on%20a%20car-orange?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/status-tested%20on%20a%20car-brightgreen?style=flat-square" alt="Status">
 </p>
 
 <p align="center">
@@ -57,10 +57,11 @@ formats, sessions, units, thresholds, fault codes and freeze-frame layouts. It i
 TCUs in a workshop. Common jobs are reading what a fault really means, checking the shift-rod distance sensors,
 running the basic settings (teach-in) after a repair, and checking a used or donor TCU before you install it.
 
-> [!IMPORTANT]
-> **Status: not yet tested on a car.** Everything is derived from static firmware analysis and cross-checked
-> against real TCU dumps, but no on-car run has confirmed it yet. Please report results: open an issue and attach the
-> log or report file.
+> [!NOTE]
+> **Confirmed on a car — Panamera 970, 2026-11-23.** A real run on the car's PDK TCU read the control-unit
+> identification and the fault memory (TCU clean, no calibration faults) and logged live shift-rod data (duty cycle,
+> sensor positions, hydraulic pressures, EDS valve currents, engine rpm) over KWP2000 on CAN. The teach-in/flash
+> writes and the other vehicle lines still want more on-car confirmation — please report results with your log/CSV.
 
 ## Features
 
